@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environments
+.env
+.venv
+env/
+venv/
+
+# Model weights
+weights/*.pt
+weights/*.pth
+weights/*.onnx
+weights/*.bin
+weights/*.safetensors
+
+# Data
+data/raw/
+data/processed/
+
+# Outputs
+outputs/logs/
+outputs/frames/
+outputs/videos/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+*.ipynb
+.ipynb_checkpoints/
+
+# Coverage
+.coverage
+htmlcov/

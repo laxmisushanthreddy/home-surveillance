@@ -1,0 +1,39 @@
+# Base configuration — inherited by all phases
+
+# ── Project ───────────────────────────────────────────────────────────────────
+project:
+  name: "home-surveillance"
+  version: "0.1.0"
+
+# ── Hardware ──────────────────────────────────────────────────────────────────
+hardware:
+  device: "cuda"        # "cuda" | "cpu" | "mps"
+  num_workers: 4
+  pin_memory: true
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+paths:
+  weights: "weights"
+  data: "data"
+  outputs: "outputs"
+  logs: "outputs/logs"
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging:
+  level: "DEBUG"
+  enable_rich: true
+  log_to_file: true
+
+# ── Video / Camera ────────────────────────────────────────────────────────────
+video:
+  source: 0
+  width: 1280
+  height: 720
+  fps: 30
+  buffer_size: 1
+
+# ── Pipeline ──────────────────────────────────────────────────────────────────
+pipeline:
+  skip_frames: 0
+  max_tracks: 20
+  alert_cooldown_sec: 60

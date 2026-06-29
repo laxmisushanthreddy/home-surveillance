@@ -1,0 +1,12 @@
+# Weight registry
+# Format:
+#   model_name:
+#     url:      Direct download URL
+#     filename: Local filename (stored in weights/)
+#     sha256:   SHA-256 hex digest ("" to skip verification)
+#
+# This file IS committed to Git.
+# Weight binary files are gitignored.
+# Entries added phase by phase.
+
+{}
