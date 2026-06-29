@@ -1,0 +1,22 @@
+# YOLOv11s detection configuration
+
+model:
+  yolo:
+    weights: "yolo11s.pt"
+    confidence_threshold: 0.5
+    iou_threshold: 0.45
+    input_size: 640
+    person_class_id: 0
+    max_detections: 300
+    device: "cuda"
+
+inference:
+  half_precision: true
+  augment: false
+  verbose: false
+
+visualization:
+  show_confidence: true
+  box_thickness: 2
+  font_scale: 0.6
+  padding_fraction: 0.1
