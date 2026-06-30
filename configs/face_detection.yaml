@@ -1,0 +1,18 @@
+# SCRFD-2.5GF face detection configuration
+
+model:
+  scrfd:
+    name: "buffalo_m"          # InsightFace model pack name
+    det_size: [320, 320]        # SCRFD input resolution for person crops
+    det_thresh: 0.5             # Face detection confidence threshold
+    nms_thresh: 0.4             # NMS IoU threshold
+
+quality:
+  min_blur_score: 50.0          # Laplacian variance threshold
+  min_face_size: 20             # Minimum face width/height in pixels
+  max_yaw_degrees: 45.0         # Maximum yaw before rejection
+
+pipeline:
+  person_crop_padding: 0.1      # Fractional padding added to person ROI
+  max_faces_per_track: 1        # Only keep best face per tracked person
+  select_by: "confidence"       # "confidence" | "quality" | "size"
