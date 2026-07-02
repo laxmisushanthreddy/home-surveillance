@@ -94,6 +94,11 @@ class Track:
 
         if self.state == TrackState.Tentative and self.hits >= self._min_hits:
             self.state = TrackState.Confirmed
+        elif self.state == TrackState.Lost:
+            # Recover Lost → Confirmed when matched again.
+            # A Lost track was previously Confirmed (min_hits already satisfied),
+            # so one successful re-match is enough to restore it.
+            self.state = TrackState.Confirmed
 
     def mark_missed(self) -> None:
         """

@@ -176,6 +176,23 @@ class TestMultiObjectTracker:
         tracker.update([], frame_idx=1)
         assert tracker.frame_count == 2
 
+    def test_lost_track_recovers_to_confirmed(self, tracker):
+        """A Lost track that gets matched again must return to Confirmed."""
+        det = self._make_detection(100, 100, 200, 300)
+        # Confirm the track
+        for i in range(3):
+            tracker.update([det], frame_idx=i)
+        # Miss one frame — track goes Lost
+        tracker.update([], frame_idx=3)
+        result = tracker.update([], frame_idx=3)
+        lost = [p for p in result if p.is_lost]
+        assert len(lost) == 1, "Track should be Lost after missed frame"
+        # Match again — should recover to Confirmed immediately
+        result = tracker.update([det], frame_idx=4)
+        confirmed = [p for p in result if p.is_confirmed]
+        assert len(confirmed) == 1, "Lost track should recover to Confirmed on re-match"
+        assert confirmed[0].track_id == lost[0].track_id, "Track ID must be same"
+
     def test_reset_clears_tracks(self, tracker):
         det = self._make_detection(100, 100, 200, 300)
         for i in range(3):

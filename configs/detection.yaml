@@ -5,10 +5,11 @@ model:
     weights: "yolo11s.pt"
     confidence_threshold: 0.5
     iou_threshold: 0.45
-    input_size: 640
+    input_size: 416
     person_class_id: 0
     max_detections: 300
     device: "cuda"
+    use_openvino_on_cpu: true
 
 inference:
   half_precision: true

@@ -2,18 +2,13 @@
 
 model:
   tracker:
-    max_age: 30               # Frames without match before track deletion
-    min_hits: 3               # Consecutive hits needed to confirm a track
-    iou_threshold: 0.3        # IoU cost threshold for accepting a match
-    conf_threshold_high: 0.5  # High-confidence detection split point
-    conf_threshold_low: 0.1   # Low-confidence detection split point
-    boost_alpha: 0.4          # BoostTrack++ confidence weighting strength
+    max_age: 90                # Frames without match before deletion (~15s at 6 FPS CPU, ~3s at 30 FPS GPU)
+    min_hits: 3                # Consecutive hits needed to confirm a track
+    iou_threshold: 0.3         # IoU cost threshold for accepting a match
+    conf_threshold_high: 0.5   # High-confidence detection split point
+    conf_threshold_low: 0.1    # Low-confidence detection split point
+    boost_alpha: 0.4           # BoostTrack++ confidence weighting strength
 
 pipeline:
-  # Only run face detection on confirmed tracks (state == Confirmed)
-  # This filters out: single-frame ghosts, edge entries, reflections
   confirmed_only: true
-
-  # Minimum track age before face detection is attempted
-  # Gives Kalman filter time to stabilize the bounding box
   min_track_age: 3

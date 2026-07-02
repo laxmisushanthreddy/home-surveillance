@@ -4,9 +4,14 @@ YOLOv11s Person Detector — Adapter pattern.
 PersonDetector.detect(frame) -> List[Detection]
 All downstream phases call this interface; none touch Ultralytics directly.
 Swapping the underlying model = rewriting only this file.
+
+CPU acceleration: when running on CPU with use_openvino_on_cpu=true in
+config, automatically exports and uses an OpenVINO-optimized model for
+~3x faster inference versus plain PyTorch CPU execution. GPU runs are
+unaffected and always use the native PyTorch/CUDA path.
 """
 
-from pathlib import Path
+from pathlib import Path as PathlibPath
 from typing import Optional
 
 import numpy as np
@@ -49,6 +54,9 @@ class PersonDetector:
 
         self._model: Optional[YOLO] = None
         self._frame_count: int = 0
+        self._use_openvino = (self._device == "cpu") and bool(
+            self._model_cfg.get("use_openvino_on_cpu", False)
+        )
 
         self._load_model()
 
@@ -62,11 +70,22 @@ class PersonDetector:
         return requested
 
     def _load_model(self) -> None:
+        """
+        Download (if needed) and load the YOLOv11s model.
+
+        Dispatches to PyTorch or OpenVINO backend based on device
+        and the use_openvino_on_cpu config flag.
+
+        Raises:
+            ModelLoadError: On any failure.
+        """
         weight_filename = self._model_cfg.weights
         weight_path = WEIGHTS_DIR / weight_filename
 
         if not weight_path.exists():
-            logger.info("Weight not found locally. Trying WeightManager download.")
+            logger.info(
+                "Weight not found locally. Trying WeightManager download."
+            )
             try:
                 manager = WeightManager()
                 weight_path = manager.get("yolov11s")
@@ -74,10 +93,17 @@ class PersonDetector:
                 logger.info(
                     "WeightManager unavailable. Ultralytics will auto-download."
                 )
-                weight_path = Path(weight_filename)
+                weight_path = PathlibPath(weight_filename)
 
+        if self._use_openvino:
+            self._load_openvino_model(weight_path)
+        else:
+            self._load_pytorch_model(weight_path)
+
+    def _load_pytorch_model(self, weight_path: PathlibPath) -> None:
+        """Load standard PyTorch YOLO model (used on GPU, or CPU with OpenVINO disabled)."""
         try:
-            logger.info("Loading YOLOv11s from: %s", weight_path)
+            logger.info("Loading YOLOv11s (PyTorch) from: %s", weight_path)
             self._model = YOLO(str(weight_path))
             self._model.fuse()
             logger.info(
@@ -86,6 +112,43 @@ class PersonDetector:
             )
         except Exception as e:
             raise ModelLoadError(f"Failed to load YOLOv11s: {e}") from e
+
+    def _load_openvino_model(self, weight_path: PathlibPath) -> None:
+        """
+        Load or export an OpenVINO-accelerated YOLOv11s model for CPU inference.
+
+        Exports once to weights/yolo11s_openvino_model/ at the configured
+        input_size if not already present, then loads via Ultralytics'
+        OpenVINO backend (auto-detected from the directory).
+        """
+        ov_dir = WEIGHTS_DIR / "yolo11s_openvino_model"
+        ov_xml = ov_dir / "yolo11s.xml"
+
+        if not ov_xml.exists():
+            logger.info(
+                "OpenVINO model not found. Exporting at imgsz=%d (one-time)...",
+                self._input_size,
+            )
+            try:
+                pt_model = YOLO(str(weight_path))
+                pt_model.export(
+                    format="openvino",
+                    dynamic=False,
+                    half=False,
+                    imgsz=self._input_size,
+                )
+            except Exception as e:
+                raise ModelLoadError(f"OpenVINO export failed: {e}") from e
+
+        try:
+            logger.info("Loading YOLOv11s (OpenVINO) from: %s", ov_dir)
+            self._model = YOLO(str(ov_dir))
+            logger.info(
+                "YOLOv11s (OpenVINO) ready. imgsz=%d | CPU-accelerated",
+                self._input_size,
+            )
+        except Exception as e:
+            raise ModelLoadError(f"Failed to load OpenVINO YOLOv11s: {e}") from e
 
     def detect(
         self,
@@ -118,7 +181,7 @@ class PersonDetector:
                     imgsz=self._input_size,
                     classes=[self._person_class_id],
                     max_det=self._max_det,
-                    device=self._device,
+                    device=self._device if not self._use_openvino else None,
                     half=self._half,
                     verbose=self._cfg.inference.verbose,
                 )
@@ -168,9 +231,24 @@ class PersonDetector:
         frames: list[NDArray[np.uint8]],
         start_frame_idx: int = 0,
     ) -> list[list[Detection]]:
-        """Batch inference — more efficient than calling detect() in a loop."""
+        """
+        Batch inference — more efficient than calling detect() in a loop
+        on GPU/PyTorch. NOTE: the OpenVINO CPU export is compiled for
+        batch=1 (single-frame latency mode), so on OpenVINO this method
+        transparently falls back to sequential single-frame calls rather
+        than true batched inference.
+        """
         if not frames:
             return []
+
+        if self._use_openvino:
+            # OpenVINO model is statically shaped for batch=1.
+            # Loop single-frame calls instead of true batching.
+            return [
+                self.detect(frame, frame_idx=start_frame_idx + i)
+                for i, frame in enumerate(frames)
+            ]
+
         try:
             results = self._model.predict(
                 source=frames,
@@ -193,16 +271,17 @@ class PersonDetector:
 
     def warmup(self, n_iterations: int = 3) -> None:
         """
-        Run dummy forward passes to warm up GPU CUDA kernels.
-        Call once after initialization, before the real-time loop.
+        Run dummy forward passes to warm up GPU CUDA kernels or
+        OpenVINO/CPU caches. Call once after initialization, before
+        the real-time loop.
         """
         logger.info("Warming up YOLOv11s (%d passes)...", n_iterations)
-        dummy = np.zeros((640, 640, 3), dtype=np.uint8)
+        dummy = np.zeros((self._input_size, self._input_size, 3), dtype=np.uint8)
         for _ in range(n_iterations):
             self._model.predict(
                 source=dummy,
                 imgsz=self._input_size,
-                device=self._device,
+                device=self._device if not self._use_openvino else None,
                 verbose=False,
             )
         logger.info("Warmup complete.")
@@ -214,3 +293,7 @@ class PersonDetector:
     @property
     def device(self) -> str:
         return self._device
+
+    @property
+    def using_openvino(self) -> bool:
+        return self._use_openvino

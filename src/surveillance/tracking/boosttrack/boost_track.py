@@ -131,11 +131,39 @@ class BoostTracker:
         tracks: list[Track],
         detections: list,
     ) -> tuple[list, list, list]:
-        """Associate tracks with detections using boosted IoU cost."""
+        """
+        Associate tracks with detections using Mahalanobis gating
+        followed by boosted IoU cost and Hungarian assignment.
+
+        Mahalanobis gating rejects matches where the detection falls
+        outside the 95th percentile of the track's predicted position
+        distribution (chi-squared threshold for 4 DoF = 9.4877).
+        This prevents the Kalman-drifted predictions of long-Lost tracks
+        from being spuriously matched to new detections far away.
+        """
+        if not tracks or not detections:
+            return [], list(range(len(tracks))), list(range(len(detections)))
+
+        import numpy as np
+        # Chi-squared 95th percentile gate for 4 degrees of freedom
+        GATE_THRESHOLD = 9.4877
+
         cost_matrix = iou_distance(tracks, detections)
         cost_matrix = boost_confidence_cost(
             cost_matrix, detections, alpha=self._boost_alpha
         )
+
+        # Apply Mahalanobis gating: set cost to infinity for implausible matches
+        # Convert detection xyxy → (cx, cy, ar, h) measurement space for gating
+        for t_idx, track in enumerate(tracks):
+            measurements = np.array([
+                self._det_to_measurement(d) for d in detections
+            ])
+            distances = track.gating_distance(measurements)
+            # Mark implausible associations as infinite cost
+            gate_mask = distances > GATE_THRESHOLD
+            cost_matrix[t_idx, gate_mask] = 1e9  # effectively infinity
+
         return linear_assignment(cost_matrix, threshold=self._iou_threshold)
 
     @staticmethod
